@@ -17,7 +17,10 @@
 package org.apache.hadoop.hdds.scm.ha;
 
 import org.apache.hadoop.hdds.utils.TransactionInfo;
+import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.hdds.utils.db.DBStore;
+import org.apache.hadoop.hdds.utils.db.RDBBatchOperation;
+import org.apache.hadoop.hdds.utils.db.RDBStore;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.ratis.statemachine.SnapshotInfo;
 
@@ -31,20 +34,41 @@ import java.util.concurrent.locks.ReentrantReadWriteLock;
 public class SCMHADBTransactionBufferStub implements SCMHADBTransactionBuffer {
   private DBStore dbStore;
   private final ReentrantReadWriteLock rwLock = new ReentrantReadWriteLock();
+  private BatchOperation currentBatchOperation;
+  private boolean isManual = false;
 
   public SCMHADBTransactionBufferStub() {
   }
 
   public SCMHADBTransactionBufferStub(DBStore store) {
+    super();
     this.dbStore = store;
   }
-
+  
+  public void setManualFlushConf(boolean manual) {
+    this.isManual = manual;
+  }
+  
+  private BatchOperation getCurrentBatchOperation() {
+    if (currentBatchOperation == null) {
+      if (dbStore != null) {
+        currentBatchOperation = dbStore.initBatchOperation();
+      } else {
+        currentBatchOperation = new RDBBatchOperation();
+      }
+    }
+    return currentBatchOperation;
+  }
   @Override
   public <KEY, VALUE> void addToBuffer(
       Table<KEY, VALUE> table, KEY key, VALUE value) throws IOException {
     rwLock.readLock().lock();
     try {
-      table.put(key, value);
+      if (isManual) {
+        table.put(key, value);
+      } else {
+        table.putWithBatch(getCurrentBatchOperation(), key, value);
+      }
     } finally {
       rwLock.readLock().unlock();
     }
@@ -55,7 +79,11 @@ public class SCMHADBTransactionBufferStub implements SCMHADBTransactionBuffer {
       throws IOException {
     rwLock.readLock().lock();
     try {
-      table.delete(key);
+      if (isManual) {
+        table.delete(key);
+      } else {
+        table.deleteWithBatch(getCurrentBatchOperation(), key);
+      }
     } finally {
       rwLock.readLock().unlock();
     }
@@ -85,8 +113,18 @@ public class SCMHADBTransactionBufferStub implements SCMHADBTransactionBuffer {
   public void flush() throws IOException {
     rwLock.writeLock().lock();
     try {
-      if (dbStore != null) {
-        dbStore.flushLog(true);
+      if (!isManual) {
+        if (dbStore != null) {
+          dbStore.commitBatchOperation(getCurrentBatchOperation());
+        }
+        if (currentBatchOperation != null) {
+          currentBatchOperation.close();
+          currentBatchOperation = null;
+        }
+      } else {
+        if (dbStore != null) {
+          dbStore.flushLog(true);
+        }
       }
     } finally {
       rwLock.writeLock().unlock();

@@ -71,6 +71,11 @@ public class RocksDBConfiguration {
           + "Default 0 means no limit.")
   private long walSizeLimit = 0;
 
+  @Config(key = "rocksdb.WAL.manual.flush.enabled",
+      type = ConfigType.BOOLEAN,
+      defaultValue = "false",
+      tags = {OM, SCM, DATANODE},
+      description = "Enable/Disable RocksDB Manual WAL flush for SCM.")
   private boolean manualWalFlush = false;
 
   public void setRocksdbLoggingEnabled(boolean enabled) {

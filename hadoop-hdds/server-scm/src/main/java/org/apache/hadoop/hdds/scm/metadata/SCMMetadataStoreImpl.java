@@ -141,7 +141,8 @@ public class SCMMetadataStoreImpl implements SCMMetadataStore {
 
       RocksDBConfiguration rocksdbConf
           = configuration.getObject(RocksDBConfiguration.class);
-      rocksdbConf.setManualWalFlush(true);
+      rocksdbConf.setManualWalFlush(configuration.getBoolean(
+          "rocksdb.WAL.manual.flush.enabled", false));
       this.store = DBStoreBuilder.createDBStore(config, new SCMDBDefinition(),
           rocksdbConf);
 
