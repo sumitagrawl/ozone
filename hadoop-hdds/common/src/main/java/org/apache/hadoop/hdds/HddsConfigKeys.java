@@ -392,4 +392,13 @@ public final class HddsConfigKeys {
 
   public static final String OZONE_AUDIT_LOG_DEBUG_CMD_LIST_DNAUDIT =
       "ozone.audit.log.debug.cmd.list.dnaudit";
+
+  // container state machine health monitor threshold for pending request,
+  // pending request memory size, follower sync difference in percent wrt
+  // configured threshold, cache miss percent and overall memory usages wrt
+  // jvm memory in percent
+  public static final String HDDS_CONTAINER_MONITOR_THRESHOLD_PERCENT =
+      "hdds.container.monitor.statemachine.threshold.percent";
+  public static final String
+      HDDS_CONTAINER_MONITOR_THRESHOLD_PERCENT_DEFAULT = "80,70,50,10,70";
 }

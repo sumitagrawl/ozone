@@ -222,9 +222,17 @@ public class CSMMetrics {
     numDataCacheMiss.incr();
   }
 
+  public long getNumDataCacheMiss() {
+    return numDataCacheMiss.value();
+  }
+
   public void incNumDataCacheHit() {
     numDataCacheHit.incr();
   }
+  public long getNumDataCacheHit() {
+    return numDataCacheHit.value();
+  }
+
   public void incNumEvictedCacheCount() {
     numEvictedCacheCount.incr();
   }

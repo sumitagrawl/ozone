@@ -46,6 +46,7 @@ import org.apache.hadoop.ozone.container.common.statemachine.DatanodeConfigurati
 import org.apache.hadoop.ozone.container.common.statemachine.StateContext;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerGrpc;
 import org.apache.hadoop.ozone.container.common.transport.server.XceiverServerSpi;
+import org.apache.hadoop.ozone.container.common.transport.server.ratis.CSHealthMonitor;
 import org.apache.hadoop.ozone.container.common.transport.server.ratis.XceiverServerRatis;
 import org.apache.hadoop.ozone.container.common.utils.ContainerInspectorUtil;
 import org.apache.hadoop.ozone.container.common.utils.HddsVolumeUtil;
@@ -117,6 +118,7 @@ public class OzoneContainer {
   private final ReplicationServer replicationServer;
   private DatanodeDetails datanodeDetails;
   private StateContext context;
+  private CSHealthMonitor csHealthMonitor;
 
 
   private final ContainerMetrics metrics;
@@ -201,9 +203,11 @@ public class OzoneContainer {
      */
     controller = new ContainerController(containerSet, handlers);
 
-    writeChannel = XceiverServerRatis.newXceiverServerRatis(
+    XceiverServerRatis ratisServer = XceiverServerRatis.newXceiverServerRatis(
         datanodeDetails, config, hddsDispatcher, controller, certClient,
         context);
+    csHealthMonitor = new CSHealthMonitor(ratisServer, conf);
+    writeChannel = ratisServer;
 
     replicationServer = new ReplicationServer(
         controller,
@@ -440,6 +444,7 @@ public class OzoneContainer {
     hddsDispatcher.setClusterId(clusterId);
     blockDeletingService.start();
     recoveringContainerScrubbingService.start();
+    csHealthMonitor.start();
 
     // mark OzoneContainer as INITIALIZED.
     initializingStatus.set(InitializingStatus.INITIALIZED);
@@ -465,6 +470,7 @@ public class OzoneContainer {
     }
     blockDeletingService.shutdown();
     recoveringContainerScrubbingService.shutdown();
+    csHealthMonitor.stop();
     ContainerMetrics.remove();
   }
 
