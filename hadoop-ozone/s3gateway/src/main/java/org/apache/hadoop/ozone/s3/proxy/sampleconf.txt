@@ -1,0 +1,61 @@
+{
+"allBuckets" :{
+  "ozone-attila": {
+    "conf": [
+      {
+        "type": "content",
+        "data": {
+          //need add secrek key and id for aws
+          "fs.s3a.endpoint": null,
+          "fs.s3a.change.detection.mode": "none",
+          "fs.s3a.change.detection.version.required": "false",
+          "fs.s3a.path.style.access": "true"
+        }
+      }
+    ],
+    "control": {
+      "aws.raz.enabled": "false"
+    }
+  },
+  "yk-test-39v": {
+    "conf": [
+    ],
+    "control": {
+      "aws.raz.enabled": "false",
+      "bucket.ref.conf": "ozone-attila"
+    }
+  },
+  "test": {
+    "conf": [
+      {
+        "type": "content",
+        "data": {
+          "fs.s3a.access.key": "dummy",
+          "fs.s3a.secret.key": "dummy",
+          "fs.s3a.endpoint": "http://localhost:9878",
+          "fs.s3a.connection.ssl.enabled": "false",
+          "fs.s3a.change.detection.mode": "none",
+          "fs.s3a.change.detection.version.required": "false",
+          "fs.s3a.path.style.access": "true"
+        }
+      }
+    ],
+    "control": {
+      "aws.raz.enabled": "false",
+      "env.id": "0.0.0.0:9874",
+      "env.conf.id": "ozone.om.http-address",
+      "bucket.replace.base.conf": "false"
+    }
+  },
+  "test1": {
+    "conf": [
+    ],
+    "control": {
+      "aws.raz.enabled": "false",
+      "bucket.ref.conf": "test",
+      "env.id": "0.0.0.0:1234",
+      "env.conf.id": "ozone.om.http-address"
+    }
+  }
+}
+}
