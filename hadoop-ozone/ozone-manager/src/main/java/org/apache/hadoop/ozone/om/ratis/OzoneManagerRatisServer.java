@@ -873,4 +873,8 @@ public final class OzoneManagerRatisServer {
     GrpcTlsConfig config = createServerTlsConfig(conf, caClient);
     return config == null ? null : RatisHelper.setServerTlsConf(config);
   }
+
+  public OzoneManagerRequestExecutor getOmRequestExecutor() {
+    return omRequestExecutor;
+  }
 }

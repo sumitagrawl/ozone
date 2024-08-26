@@ -129,6 +129,20 @@ public class FullTableCache<KEY, VALUE> implements TableCache<KEY, VALUE> {
   }
 
   @Override
+  public void reset(CacheKey<KEY> cacheKey, CacheValue<VALUE> value) {
+    lock.writeLock().lock();
+    try {
+      CacheValue<VALUE> cacheValue = cache.get(cacheKey);
+      if (cacheValue.getEpoch() > value.getEpoch()) {
+        return;
+      }
+      cache.put(cacheKey, value);
+    } finally {
+      lock.writeLock().unlock();
+    }
+  }
+
+  @Override
   public void cleanup(List<Long> epochs) {
     epochCleanupQueue.clear();
     epochCleanupQueue.addAll(epochs);

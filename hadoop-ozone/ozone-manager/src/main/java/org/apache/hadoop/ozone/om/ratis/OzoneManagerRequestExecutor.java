@@ -21,6 +21,7 @@ import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ByteString;
 import com.google.protobuf.ServiceException;
 import java.io.IOException;
+import java.util.Collections;
 import java.util.Map;
 import java.util.concurrent.CompletableFuture;
 import java.util.concurrent.ExecutorService;
@@ -43,7 +44,6 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.hadoop.util.concurrent.HadoopExecutors;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.apache.ratis.statemachine.impl.SimpleStateMachineStorage;
-import org.jetbrains.annotations.Nullable;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
 
@@ -163,7 +163,6 @@ public class OzoneManagerRequestExecutor {
     }
   }
 
-  @Nullable
   private OMResponse applyDbUpdateViaRatis(OMRequest request, TermIndex termIndex, OMClientResponse omClientResponse)
       throws IOException, ServiceException {
     try (BatchOperation batchOperation = ozoneManager.getMetadataManager().getStore()
@@ -191,13 +190,36 @@ public class OzoneManagerRequestExecutor {
       reqBuilder.setCacheIndex(termIndex.getIndex());
       OMRequest.Builder omReqBuilder = OMRequest.newBuilder().setPersistDbRequest(reqBuilder.build())
           .setCmdType(OzoneManagerProtocolProtos.Type.PersistDb).setClientId(request.getClientId());
-      OMResponse response = ozoneManager.getOmRatisServer().submitRequest(omReqBuilder.build());
-      if (!response.getSuccess()) {
-        // Do update to DB failure need crash OM?
-        return response;
+      try {
+        OMResponse response = ozoneManager.getOmRatisServer().submitRequest(omReqBuilder.build());
+        if (!response.getSuccess()) {
+          refreshCache(termIndex.getIndex(), cachedDbTxs);
+          return response;
+        }
+      } catch (Exception ex) {
+        refreshCache(termIndex.getIndex(), cachedDbTxs);
+        throw ex;
       }
     }
     return null;
+  }
+
+  private void refreshCache(long index, Map<String, Map<byte[], byte[]>> cachedDbTxs) throws IOException {
+    String bucketTableName = ozoneManager.getMetadataManager().getBucketTable().getName();
+    String volTableName = ozoneManager.getMetadataManager().getVolumeTable().getName();
+    for (Map.Entry<String, Map<byte[], byte[]>> tblEntry : cachedDbTxs.entrySet()) {
+      if (tblEntry.getKey().equals(bucketTableName)) {
+        for (byte[] keyName : tblEntry.getValue().keySet()) {
+          ozoneManager.getMetadataManager().getBucketTable().resetCache(keyName, index);
+        }
+      }
+      if (tblEntry.getKey().equals(volTableName)) {
+        for (byte[] keyName : tblEntry.getValue().keySet()) {
+          ozoneManager.getMetadataManager().getVolumeTable().resetCache(keyName, index);
+        }
+      }
+      ozoneManager.getMetadataManager().getTable(tblEntry.getKey()).cleanupCache(Collections.singletonList(index));
+    }
   }
 
   private OMResponse createErrorResponse(OMRequest omRequest, IOException exception) {
@@ -217,5 +239,10 @@ public class OzoneManagerRequestExecutor {
     final CompletableFuture<T> future = new CompletableFuture<>();
     future.completeExceptionally(e);
     return future;
+  }
+
+  public void notifyTermIndex(TermIndex termIndex) {
+    long lastIdx = cacheIndex.get();
+    cacheIndex.set(termIndex.getIndex() > lastIdx ? termIndex.getIndex() : lastIdx);
   }
 }

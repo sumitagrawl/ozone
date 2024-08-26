@@ -19,7 +19,9 @@
 package org.apache.hadoop.ozone.om.request;
 
 import java.io.IOException;
+import java.util.Collections;
 import java.util.List;
+import org.apache.hadoop.hdds.utils.TransactionInfo;
 import org.apache.hadoop.hdds.utils.db.BatchOperation;
 import org.apache.hadoop.hdds.utils.db.Table;
 import org.apache.hadoop.ozone.om.OzoneManager;
@@ -33,6 +35,8 @@ import org.apache.hadoop.security.UserGroupInformation;
 import org.apache.ratis.server.protocol.TermIndex;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
+
+import static org.apache.hadoop.ozone.OzoneConsts.TRANSACTION_INFO_KEY;
 
 /**
  * Handle OMQuotaRepairRequest Request.
@@ -70,7 +74,8 @@ public class OMPersistDbRequest extends OMClientRequest {
         List<OzoneManagerProtocolProtos.DBTableRecord> recordsList = tblUpdates.getRecordsList();
         for (OzoneManagerProtocolProtos.DBTableRecord record : recordsList) {
           if (record.hasValue()) {
-            table.getRawTable().putWithBatch(batchOperation, record.getKey().toByteArray(), record.getValue().toByteArray());
+            table.getRawTable().putWithBatch(batchOperation, record.getKey().toByteArray(),
+                record.getValue().toByteArray());
             // put
           } else {
             // delete
@@ -78,8 +83,11 @@ public class OMPersistDbRequest extends OMClientRequest {
           }
         }
       }
+      ozoneManager.getMetadataManager().getTransactionInfoTable().putWithBatch(
+          batchOperation, TRANSACTION_INFO_KEY, TransactionInfo.valueOf(termIndex));
       ozoneManager.getMetadataManager().getStore().commitBatchOperation(batchOperation);
       omResponse.setPersistDbResponse(OzoneManagerProtocolProtos.PersistDbResponse.newBuilder().build());
+      refreshCache(ozoneManager, dbUpdateRequest.getCacheIndex(), tableUpdatesList);
     } catch (Exception ex) {
       LOG.warn("sumit..dbupdate..failed...{}--{}", dbUpdateRequest.getCacheIndex(), termIndex.getIndex());
       return new DummyOMClientResponse(createErrorOMResponse(omResponse, ex));
@@ -87,5 +95,28 @@ public class OMPersistDbRequest extends OMClientRequest {
     LOG.warn("sumit..dbupdate..success...{}--{}", dbUpdateRequest.getCacheIndex(), termIndex.getIndex());
     OMClientResponse omClientResponse = new DummyOMClientResponse(omResponse.build());
     return omClientResponse;
+  }
+
+  private void refreshCache(
+      OzoneManager ozoneManager, long index, List<OzoneManagerProtocolProtos.DBTableUpdate> tableUpdatesList)
+      throws IOException {
+    String bucketTableName = ozoneManager.getMetadataManager().getBucketTable().getName();
+    String volTableName = ozoneManager.getMetadataManager().getVolumeTable().getName();
+    for (OzoneManagerProtocolProtos.DBTableUpdate tblUpdates : tableUpdatesList) {
+      if (tblUpdates.getTableName().equals(bucketTableName)) {
+        List<OzoneManagerProtocolProtos.DBTableRecord> recordsList = tblUpdates.getRecordsList();
+        for (OzoneManagerProtocolProtos.DBTableRecord record : recordsList) {
+          ozoneManager.getMetadataManager().getBucketTable().resetCache(record.getKey().toByteArray(), index);
+        }
+      }
+      if (tblUpdates.getTableName().equals(volTableName)) {
+        List<OzoneManagerProtocolProtos.DBTableRecord> recordsList = tblUpdates.getRecordsList();
+        for (OzoneManagerProtocolProtos.DBTableRecord record : recordsList) {
+          ozoneManager.getMetadataManager().getVolumeTable().resetCache(record.getKey().toByteArray(), index);
+        }
+      }
+      ozoneManager.getMetadataManager().getTable(tblUpdates.getTableName())
+          .cleanupCache(Collections.singletonList(index));
+    }
   }
 }

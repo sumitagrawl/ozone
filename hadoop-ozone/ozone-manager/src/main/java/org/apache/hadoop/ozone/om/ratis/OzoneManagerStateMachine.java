@@ -160,6 +160,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
                                   RaftPeerId newLeaderId) {
     // Initialize OMHAMetrics
     ozoneManager.omHAMetricsInit(newLeaderId.toString());
+    ozoneManager.getOmRatisServer().getOmRequestExecutor().notifyTermIndex(getLastNotifiedTermIndex());
   }
 
   /** Notified by Ratis for non-StateMachine term-index update. */
@@ -356,7 +357,7 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       // executor has completed the transactions with id more.
 
       //if there are too many pending requests, wait for doubleBuffer flushing
-      ozoneManagerDoubleBuffer.acquireUnFlushedTransactions(1);
+      //ozoneManagerDoubleBuffer.acquireUnFlushedTransactions(1);
 
       return CompletableFuture.supplyAsync(() -> runCommand(request, termIndex), executorService)
           .thenApply(this::processResponse);
@@ -468,11 +469,11 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       if (ozoneManager.isStopped()) {
         throw new IOException("OzoneManager is already stopped: " + ozoneManager.getNodeDetails());
       }
-      try {
-        ozoneManagerDoubleBuffer.awaitFlush();
-      } catch (InterruptedException e) {
-        throw IOUtils.toInterruptedIOException("Interrupted ozoneManagerDoubleBuffer.awaitFlush", e);
-      }
+      //try {
+      //  ozoneManagerDoubleBuffer.awaitFlush();
+      //} catch (InterruptedException e) {
+      //  throw IOUtils.toInterruptedIOException("Interrupted ozoneManagerDoubleBuffer.awaitFlush", e);
+      //}
     }
 
     return takeSnapshotImpl();
@@ -540,8 +541,8 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
    */
   private OMResponse runCommand(OMRequest request, TermIndex termIndex) {
     try {
-      final OMClientResponse omClientResponse = handler.handleWriteRequest(
-          request, termIndex, ozoneManagerDoubleBuffer);
+      final OMClientResponse omClientResponse = handler.handleWriteRequestImpl(
+          request, termIndex);
       OMLockDetails omLockDetails = omClientResponse.getOmLockDetails();
       OMResponse omResponse = omClientResponse.getOMResponse();
       if (omLockDetails != null) {
@@ -557,6 +558,8 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       // For any Runtime exceptions, terminate OM.
       String errorMessage = "Request " + request + " failed with exception";
       ExitUtils.terminate(1, errorMessage, e, LOG);
+    } finally {
+      updateLastAppliedTermIndex(termIndex);
     }
     return null;
   }
@@ -572,8 +575,8 @@ public class OzoneManagerStateMachine extends BaseStateMachine {
       omResponseBuilder.setMessage(exception.getMessage());
     }
     OMResponse omResponse = omResponseBuilder.build();
-    OMClientResponse omClientResponse = new DummyOMClientResponse(omResponse);
-    ozoneManagerDoubleBuffer.add(omClientResponse, termIndex);
+    //OMClientResponse omClientResponse = new DummyOMClientResponse(omResponse);
+    //ozoneManagerDoubleBuffer.add(omClientResponse, termIndex);
     return omResponse;
   }
 
