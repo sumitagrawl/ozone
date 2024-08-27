@@ -65,6 +65,14 @@ public interface TableCache<KEY, VALUE> {
    */
   void cleanup(List<Long> epochs);
 
+  /**
+   * reset cache value with new value provided if new epoch is later or equal to current epoch.
+   * @param cacheKey
+   * @param value
+   */
+  default void reset(CacheKey<KEY> cacheKey, CacheValue<VALUE> value) {
+  }
+
   @VisibleForTesting
   void evictCache(List<Long> epochs);
 

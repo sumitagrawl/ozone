@@ -228,6 +228,10 @@ public interface Table<KEY, VALUE> extends AutoCloseable {
     throw new NotImplementedException("cleanupCache is not implemented");
   }
 
+  default void resetCache(byte[] encodedKey, long epoch) throws IOException {
+    throw new NotImplementedException("reset cache is not implemented");
+  }
+
   /**
    * Return cache iterator maintained for this table.
    */
@@ -327,6 +331,10 @@ public interface Table<KEY, VALUE> extends AutoCloseable {
    * @throws IOException
    */
   void loadFromFile(File externalFile) throws IOException;
+  
+  default Table getRawTable() {
+    return this;
+  }
 
   /**
    * Class used to represent the key and value pair of a db entry.

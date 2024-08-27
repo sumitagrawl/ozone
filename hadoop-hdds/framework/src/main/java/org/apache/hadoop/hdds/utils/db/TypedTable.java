@@ -28,6 +28,7 @@ import java.util.Map;
 import java.util.Objects;
 
 import com.google.common.annotations.VisibleForTesting;
+import org.apache.commons.lang3.NotImplementedException;
 import org.apache.hadoop.hdds.utils.IOUtils;
 import org.apache.hadoop.hdds.utils.MetadataKeyFilters;
 import org.apache.hadoop.hdds.utils.TableCacheMetrics;
@@ -486,6 +487,20 @@ public class TypedTable<KEY, VALUE> implements Table<KEY, VALUE> {
   }
 
   @Override
+  public void resetCache(byte[] encodedKey, long epoch) throws IOException {
+    if (cache.getCacheType() != CacheType.FULL_CACHE) {
+      return;
+    }
+    KEY key = decodeKey(encodedKey);
+    VALUE val = getSkipCache(key);
+    if (val != null) {
+      addCacheEntry(key, val, epoch);
+    } else {
+      addCacheEntry(key, epoch);
+    }
+  }
+
+  @Override
   public List<TypedKeyValue> getRangeKVs(
           KEY startKey, int count, KEY prefix,
           MetadataKeyFilters.MetadataKeyFilter... filters)
@@ -542,7 +557,10 @@ public class TypedTable<KEY, VALUE> implements Table<KEY, VALUE> {
   public void loadFromFile(File externalFile) throws IOException {
     rawTable.loadFromFile(externalFile);
   }
-
+  @Override
+  public Table getRawTable() {
+    return rawTable;
+  }
   @Override
   public void cleanupCache(List<Long> epochs) {
     cache.cleanup(epochs);
