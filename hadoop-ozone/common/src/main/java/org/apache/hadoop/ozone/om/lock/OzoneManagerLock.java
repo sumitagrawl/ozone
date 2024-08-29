@@ -188,13 +188,13 @@ public class OzoneManagerLock implements IOzoneManagerLock {
     long startWaitingTimeNanos = Time.monotonicNowNanos();
 
     ReentrantReadWriteLock lock = getLock(resource, keys);
-    if (isReadLock) {
-      lock.readLock().lock();
-      updateReadLockMetrics(resource, lock, startWaitingTimeNanos);
-    } else {
-      lock.writeLock().lock();
-      updateWriteLockMetrics(resource, lock, startWaitingTimeNanos);
-    }
+    //if (isReadLock) {
+      //lock.readLock().lock();
+      //updateReadLockMetrics(resource, lock, startWaitingTimeNanos);
+    //} else {
+      //lock.writeLock().lock();
+      //updateWriteLockMetrics(resource, lock, startWaitingTimeNanos);
+    //}
 
     lockSet.set(resource.setLock(lockSet.get()));
     omLockDetails.get().setLockAcquired(true);
@@ -337,15 +337,15 @@ public class OzoneManagerLock implements IOzoneManagerLock {
   private OMLockDetails releaseLock(Resource resource, boolean isReadLock,
       String... keys) {
     omLockDetails.get().clear();
-    ReentrantReadWriteLock lock = getLock(resource, keys);
-    if (isReadLock) {
-      lock.readLock().unlock();
-      updateReadUnlockMetrics(resource, lock);
-    } else {
-      boolean isWriteLocked = lock.isWriteLockedByCurrentThread();
-      lock.writeLock().unlock();
-      updateWriteUnlockMetrics(resource, lock, isWriteLocked);
-    }
+    //ReentrantReadWriteLock lock = getLock(resource, keys);
+    //if (isReadLock) {
+    //  lock.readLock().unlock();
+    //  updateReadUnlockMetrics(resource, lock);
+    //} else {
+    //  boolean isWriteLocked = lock.isWriteLockedByCurrentThread();
+    //  lock.writeLock().unlock();
+    //  updateWriteUnlockMetrics(resource, lock, isWriteLocked);
+    //}
 
     lockSet.set(resource.clearLock(lockSet.get()));
     return omLockDetails.get();

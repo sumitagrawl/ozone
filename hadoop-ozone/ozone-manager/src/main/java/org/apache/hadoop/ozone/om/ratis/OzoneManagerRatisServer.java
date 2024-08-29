@@ -259,11 +259,11 @@ public final class OzoneManagerRatisServer {
    * @return OMResponse - response returned to the client.
    * @throws ServiceException
    */
-  public OMResponse submitRequest(OMRequest omRequest) throws ServiceException {
+  public OMResponse submitRequest(OMRequest omRequest, long callId) throws ServiceException {
     // In prepare mode, only prepare and cancel requests are allowed to go
     // through.
     if (ozoneManager.getPrepareState().requestAllowed(omRequest.getCmdType())) {
-      RaftClientRequest raftClientRequest = createRaftRequest(omRequest);
+      RaftClientRequest raftClientRequest = createRaftRequest(omRequest, callId);
       RaftClientReply raftClientReply = submitRequestToRatis(raftClientRequest);
       return createOmResponse(omRequest, raftClientReply);
     } else {
@@ -297,10 +297,10 @@ public final class OzoneManagerRatisServer {
         () -> submitRequestToRatisImpl(raftClientRequest));
   }
 
-  private RaftClientRequest createRaftRequest(OMRequest omRequest) {
+  private RaftClientRequest createRaftRequest(OMRequest omRequest, long callId) {
     return captureLatencyNs(
         perfMetrics.getCreateRatisRequestLatencyNs(),
-        () -> createRaftRequestImpl(omRequest));
+        () -> createRaftRequestImpl(omRequest, callId));
   }
 
   /**
@@ -463,7 +463,7 @@ public final class OzoneManagerRatisServer {
    * @return RaftClientRequest - Raft Client request which is submitted to
    * ratis server.
    */
-  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest) {
+  private RaftClientRequest createRaftRequestImpl(OMRequest omRequest, long callId) {
     // TODO remove as Server.getClientId() is set for external request, but with change
     // in mode, this is not required as submit will be done internally
     //if (!ozoneManager.isTestSecureOmFlag()) {
@@ -471,11 +471,11 @@ public final class OzoneManagerRatisServer {
     //  Preconditions.checkArgument(Server.getCallId() != INVALID_CALL_ID);
     //}
     return RaftClientRequest.newBuilder()
-        .setClientId(
-            ClientId.valueOf(UUID.nameUUIDFromBytes(Server.getClientId())))
+        .setClientId(ClientId.randomId())
+        //    ClientId.valueOf(UUID.nameUUIDFromBytes(Server.getClientId())))
         .setServerId(server.getId())
         .setGroupId(raftGroupId)
-        .setCallId(Server.getCallId())
+        .setCallId(callId)
         .setMessage(
             Message.valueOf(
                 OMRatisHelper.convertRequestToByteString(omRequest)))

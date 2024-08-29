@@ -74,11 +74,13 @@ public class OMPersistDbRequest extends OMClientRequest {
         List<OzoneManagerProtocolProtos.DBTableRecord> recordsList = tblUpdates.getRecordsList();
         for (OzoneManagerProtocolProtos.DBTableRecord record : recordsList) {
           if (record.hasValue()) {
+            //LOG.warn("sumit...dbupdate...record...{}-{}", table, record.getKey().toStringUtf8());
             table.getRawTable().putWithBatch(batchOperation, record.getKey().toByteArray(),
                 record.getValue().toByteArray());
             // put
           } else {
             // delete
+            //LOG.warn("sumit...dbupdate...delrecord...{}-{}", table, record.getKey().toStringUtf8());
             table.getRawTable().deleteWithBatch(batchOperation, record.getKey().toByteArray());
           }
         }
