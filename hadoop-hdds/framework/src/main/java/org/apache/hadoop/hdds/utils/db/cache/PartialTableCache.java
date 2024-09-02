@@ -27,12 +27,8 @@ import java.util.NavigableMap;
 import java.util.Set;
 import java.util.concurrent.ConcurrentHashMap;
 import java.util.concurrent.ConcurrentSkipListMap;
-import java.util.concurrent.ExecutorService;
-import java.util.concurrent.Executors;
-import java.util.concurrent.ThreadFactory;
 
 import com.google.common.annotations.VisibleForTesting;
-import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import org.apache.hadoop.hdds.annotation.InterfaceAudience.Private;
 import org.apache.hadoop.hdds.annotation.InterfaceStability.Evolving;
 import org.slf4j.Logger;
@@ -54,7 +50,7 @@ public class PartialTableCache<KEY, VALUE> implements TableCache<KEY, VALUE> {
 
   private final Map<CacheKey<KEY>, CacheValue<VALUE>> cache;
   private final NavigableMap<Long, Set<CacheKey<KEY>>> epochEntries;
-  private final ExecutorService executorService;
+  //private final ExecutorService executorService;
   private final CacheStatsRecorder statsRecorder;
 
 
@@ -77,11 +73,11 @@ public class PartialTableCache<KEY, VALUE> implements TableCache<KEY, VALUE> {
     epochEntries = new ConcurrentSkipListMap<>();
     // Created a singleThreadExecutor, so one cleanup will be running at a
     // time.
-    ThreadFactory threadFactory = new ThreadFactoryBuilder()
-        .setDaemon(true)
-        .setNameFormat(threadNamePrefix + "PartialTableCache-Cleanup-%d")
-        .build();
-    executorService = Executors.newSingleThreadExecutor(threadFactory);
+    //ThreadFactory threadFactory = new ThreadFactoryBuilder()
+    //    .setDaemon(true)
+    //    .setNameFormat(threadNamePrefix + "PartialTableCache-Cleanup-%d")
+    //    .build();
+    //executorService = Executors.newSingleThreadExecutor(threadFactory);
 
     statsRecorder = new CacheStatsRecorder();
   }
@@ -107,7 +103,8 @@ public class PartialTableCache<KEY, VALUE> implements TableCache<KEY, VALUE> {
 
   @Override
   public void cleanup(List<Long> epochs) {
-    executorService.execute(() -> evictCache(epochs));
+    //executorService.execute(() -> evictCache(epochs));
+    evictCache(epochs);
   }
 
   @Override
@@ -137,27 +134,27 @@ public class PartialTableCache<KEY, VALUE> implements TableCache<KEY, VALUE> {
       }
       // As ConcurrentHashMap computeIfPresent is atomic, there is no race
       // condition between cache cleanup and requests updating same cache entry.
-      if (epochs.contains(currentEpoch)) {
-        for (Iterator<CacheKey<KEY>> iterator = currentCacheKeys.iterator();
-             iterator.hasNext();) {
-          cachekey = iterator.next();
-          cache.computeIfPresent(cachekey, ((k, v) -> {
-            // If cache epoch entry matches with current Epoch, remove entry
-            // from cache.
-            if (v.getEpoch() == currentEpoch) {
-              if (LOG.isDebugEnabled()) {
-                LOG.debug("CacheKey {} with epoch {} is removed from cache",
-                        k.getCacheKey(), currentEpoch);
-              }
-              return null;
+      //if (epochs.contains(currentEpoch)) {
+      for (Iterator<CacheKey<KEY>> iterator = currentCacheKeys.iterator();
+           iterator.hasNext();) {
+        cachekey = iterator.next();
+        cache.computeIfPresent(cachekey, ((k, v) -> {
+          // If cache epoch entry matches with current Epoch, remove entry
+          // from cache.
+          if (v.getEpoch() == currentEpoch) {
+            if (LOG.isDebugEnabled()) {
+              LOG.debug("CacheKey {} with epoch {} is removed from cache",
+                      k.getCacheKey(), currentEpoch);
             }
-            return v;
-          }));
-        }
-        // Remove epoch entry, as the entry is there in epoch list.
-        epochEntries.remove(currentEpoch);
+            return null;
+          }
+          return v;
+        }));
       }
+      // Remove epoch entry, as the entry is there in epoch list.
+      epochEntries.remove(currentEpoch);
     }
+    //}
   }
 
   @Override

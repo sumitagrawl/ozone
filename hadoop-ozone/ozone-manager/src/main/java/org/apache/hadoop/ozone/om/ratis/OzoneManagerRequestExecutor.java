@@ -20,6 +20,7 @@ package org.apache.hadoop.ozone.om.ratis;
 import com.google.common.util.concurrent.ThreadFactoryBuilder;
 import com.google.protobuf.ByteString;
 import java.io.IOException;
+import java.nio.ByteBuffer;
 import java.util.ArrayList;
 import java.util.Collection;
 import java.util.Collections;
@@ -60,10 +61,12 @@ public class OzoneManagerRequestExecutor {
 
   public static final Logger LOG =
       LoggerFactory.getLogger(OzoneManagerRequestExecutor.class);
+  private static final int BATCH_SIZE = 15;
   private final OzoneManager ozoneManager;
   private RequestHandler handler;
   private final String threadPrefix;
   private final AtomicLong cacheIndex = new AtomicLong();
+  private final AtomicLong cleanCacheIndex = new AtomicLong();
   private final AtomicLong currentTerm = new AtomicLong(1);
   private final ExecutorPipeline[] executorPipelines;
 
@@ -77,8 +80,9 @@ public class OzoneManagerRequestExecutor {
         .setNameFormat(threadPrefix +
             "OMStateMachineApplyTransactionThread - %d").build();
     executorPipelines = new ExecutorPipeline[2];
-    executorPipelines[0] = new ExecutorPipeline(10, this::runExecuteCommand);
+    executorPipelines[0] = new ExecutorPipeline(BATCH_SIZE, this::runExecuteCommand);
     executorPipelines[1] = new ExecutorPipeline(1, this::dbUpdateBatchCommand);
+    //executorPipelines[1] = new ExecutorPipeline(1, this::dbUpdateBatchSerialCommand);
   }
 
   /**
@@ -128,7 +132,7 @@ public class OzoneManagerRequestExecutor {
     requestContext.setFuture(new CompletableFuture<>());
     try {
       String distributionKey = getDistributionKey(omRequest, ozoneManager);
-      int idx = Math.abs(distributionKey.hashCode() % 10);
+      int idx = Math.abs(distributionKey.hashCode() % BATCH_SIZE);
       //LOG.warn("sumit..entry...{}-{}-{}", omRequest.getCmdType().name(), distributionKey, idx);
       executorPipelines[0].submit(idx, requestContext);
     } catch (InterruptedException e) {
@@ -158,7 +162,7 @@ public class OzoneManagerRequestExecutor {
       }
       ctx.setResponse(omResponse);
       if (omResponse.getSuccess()) {
-        OMRequest nextRequest = prepareDBupdateRequest(request, termIndex, omClientResponse);
+        OMRequest.Builder nextRequest = prepareDBupdateRequest(request, termIndex, omClientResponse);
         if (nextRequest != null) {
           ctx.setNextRequest(nextRequest);
         }
@@ -187,9 +191,10 @@ public class OzoneManagerRequestExecutor {
     OzoneManagerProtocolProtos.PersistDbRequest.Builder reqBuilder
         = OzoneManagerProtocolProtos.PersistDbRequest.newBuilder();
     int count = ctxs.size();
+    long index = 0;
     for (RequestContext ctx : ctxs) {
       //LOG.warn("sumit..start.DB.{}-{}", ctx.getRequest().getCmdType().name(), ctx.getCacheIndex().getIndex());
-      OMRequest nextRequest = ctx.getNextRequest();
+      OMRequest.Builder nextRequest = ctx.getNextRequest();
       for (OzoneManagerProtocolProtos.DBTableUpdate tblUpdates
           : nextRequest.getPersistDbRequest().getTableUpdatesList()) {
         OzoneManagerProtocolProtos.DBTableUpdate.Builder tblBuilder
@@ -198,10 +203,16 @@ public class OzoneManagerRequestExecutor {
         tblBuilder.addAllRecords(tblUpdates.getRecordsList());
         reqBuilder.addTableUpdates(tblBuilder.build());
       }
+      if (0 == index) {
+        index = ctx.getCacheIndex().getIndex();
+      } else {
+        index = Math.min(index, ctx.getCacheIndex().getIndex());
+      }
       // TODO based on size of request, need merge, test purpose, add all
       --count;
       if (count == 0) {
-        reqBuilder.setCacheIndex(nextRequest.getPersistDbRequest().getCacheIndex());
+        index -= 1;
+        reqBuilder.setCacheIndex(index);
         OMRequest.Builder omReqBuilder = OMRequest.newBuilder().setPersistDbRequest(reqBuilder.build())
             .setCmdType(OzoneManagerProtocolProtos.Type.PersistDb).setClientId(nextRequest.getClientId());
         
@@ -220,13 +231,15 @@ public class OzoneManagerRequestExecutor {
         } catch (IOException e) {
           LOG.warn("Failed to write, Exception occurred ", e);
           for (RequestContext repCtx : ctxs) {
-            LOG.warn("sumit..end.DB.Fail.{}-{}", repCtx.getRequest().getCmdType().name(), repCtx.getCacheIndex().getIndex());
+            LOG.warn("sumit..end.DB.Fail.{}-{}", repCtx.getRequest().getCmdType().name(),
+                repCtx.getCacheIndex().getIndex());
             repCtx.getFuture().complete(createErrorResponse(ctx.getRequest(), e));
           }
         } catch (Throwable e) {
           LOG.warn("Failed to write, Exception occurred ", e);
           for (RequestContext repCtx : ctxs) {
-            LOG.warn("sumit..end.DB.Fail.{}-{}", repCtx.getRequest().getCmdType().name(), repCtx.getCacheIndex().getIndex());
+            LOG.warn("sumit..end.DB.Fail.{}-{}", repCtx.getRequest().getCmdType().name(),
+                repCtx.getCacheIndex().getIndex());
             repCtx.getFuture().complete(createErrorResponse(ctx.getRequest(), new IOException(e)));
 
           }
@@ -234,10 +247,15 @@ public class OzoneManagerRequestExecutor {
       }
     }
   }
+  private void dbUpdateBatchSerialCommand(Collection<RequestContext> ctxs) {
+    for (RequestContext ctx : ctxs) {
+      dbUpdate(ctx);
+    }
+  }
   private void dbUpdate(RequestContext ctx) {
     OMResponse finalResponse = ctx.getResponse();
     try {
-      OMResponse dbUpdateRsp = sendDbUpdateRequest(ctx.getNextRequest(), ctx.getCacheIndex());
+      OMResponse dbUpdateRsp = sendDbUpdateRequest(ctx.getNextRequest().build(), ctx.getCacheIndex());
       if (dbUpdateRsp != null) {
         // in case of failure, return db update failure response
         finalResponse = dbUpdateRsp;
@@ -269,20 +287,21 @@ public class OzoneManagerRequestExecutor {
     }
     return null;
   }
-  private OMRequest prepareDBupdateRequest(OMRequest request, TermIndex termIndex, OMClientResponse omClientResponse)
-      throws IOException {
+  private OMRequest.Builder prepareDBupdateRequest(OMRequest request, TermIndex termIndex,
+                                                   OMClientResponse omClientResponse) throws IOException {
     try (BatchOperation batchOperation = ozoneManager.getMetadataManager().getStore()
         .initBatchOperation()) {
       omClientResponse.checkAndUpdateDB(ozoneManager.getMetadataManager(), batchOperation);
       // get db update and raise request to flush
       OzoneManagerProtocolProtos.PersistDbRequest.Builder reqBuilder
           = OzoneManagerProtocolProtos.PersistDbRequest.newBuilder();
-      Map<String, Map<byte[], byte[]>> cachedDbTxs = ((RDBBatchOperation) batchOperation).getCachedTransaction();
-      for (Map.Entry<String, Map<byte[], byte[]>> tblEntry : cachedDbTxs.entrySet()) {
+      Map<String, Map<ByteBuffer, ByteBuffer>> cachedDbTxs
+          = ((RDBBatchOperation) batchOperation).getCachedTransaction();
+      for (Map.Entry<String, Map<ByteBuffer, ByteBuffer>> tblEntry : cachedDbTxs.entrySet()) {
         OzoneManagerProtocolProtos.DBTableUpdate.Builder tblBuilder
             = OzoneManagerProtocolProtos.DBTableUpdate.newBuilder();
         tblBuilder.setTableName(tblEntry.getKey());
-        for (Map.Entry<byte[], byte[]> kvEntry : tblEntry.getValue().entrySet()) {
+        for (Map.Entry<ByteBuffer, ByteBuffer> kvEntry : tblEntry.getValue().entrySet()) {
           OzoneManagerProtocolProtos.DBTableRecord.Builder kvBuild
               = OzoneManagerProtocolProtos.DBTableRecord.newBuilder();
           kvBuild.setKey(ByteString.copyFrom(kvEntry.getKey()));
@@ -296,7 +315,7 @@ public class OzoneManagerRequestExecutor {
       reqBuilder.setCacheIndex(termIndex.getIndex());
       OMRequest.Builder omReqBuilder = OMRequest.newBuilder().setPersistDbRequest(reqBuilder.build())
           .setCmdType(OzoneManagerProtocolProtos.Type.PersistDb).setClientId(request.getClientId());
-      return omReqBuilder.build();
+      return omReqBuilder;
     }
   }
 
@@ -340,6 +359,7 @@ public class OzoneManagerRequestExecutor {
     long lastIdx = cacheIndex.get();
     cacheIndex.set(termIndex.getIndex() > lastIdx ? termIndex.getIndex() : lastIdx);
     currentTerm.set(termIndex.getTerm());
+    cleanCacheIndex.set(termIndex.getIndex() > lastIdx ? termIndex.getIndex() : lastIdx);
   }
 
   /**
@@ -350,7 +370,7 @@ public class OzoneManagerRequestExecutor {
     private OMResponse response;
     private TermIndex cacheIndex;
     private CompletableFuture<OMResponse> future;
-    private OMRequest nextRequest;
+    private OMRequest.Builder nextRequest;
 
     private RequestContext() {
     }
@@ -387,11 +407,11 @@ public class OzoneManagerRequestExecutor {
       this.future = future;
     }
 
-    public OMRequest getNextRequest() {
+    public OMRequest.Builder getNextRequest() {
       return nextRequest;
     }
 
-    public void setNextRequest(OMRequest nextRequest) {
+    public void setNextRequest(OMRequest.Builder nextRequest) {
       this.nextRequest = nextRequest;
     }
   }

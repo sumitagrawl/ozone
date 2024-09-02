@@ -22,6 +22,7 @@ import com.google.common.base.Preconditions;
 import org.apache.hadoop.hdds.utils.db.RocksDatabase.ColumnFamily;
 import org.apache.hadoop.hdds.utils.db.managed.ManagedWriteBatch;
 import org.apache.hadoop.hdds.utils.db.managed.ManagedWriteOptions;
+import org.apache.ratis.thirdparty.io.netty.buffer.ByteBuf;
 import org.apache.ratis.util.TraditionalBinaryPrefix;
 import org.slf4j.Logger;
 import org.slf4j.LoggerFactory;
@@ -91,7 +92,7 @@ public class RDBBatchOperation implements BatchOperation {
       return buffer.getArray();
     }
 
-    ByteBuffer asReadOnlyByteBuffer() {
+    public ByteBuffer asReadOnlyByteBuffer() {
       return buffer.asReadOnlyByteBuffer();
     }
 
@@ -327,18 +328,19 @@ public class RDBBatchOperation implements BatchOperation {
           countSize2String(opCount - discardedCount, opSize - discardedSize));
     }
 
-    Map<String, Map<byte[], byte[]>> getCachedTransaction() {
-      Map<String, Map<byte[], byte[]>> tableMap = new HashMap<>();
+    Map<String, Map<ByteBuffer, ByteBuffer>> getCachedTransaction() {
+      Map<String, Map<ByteBuffer, ByteBuffer>> tableMap = new HashMap<>();
       for (Map.Entry<String, FamilyCache> e : name2cache.entrySet()) {
-        Map<byte[], byte[]> dataMap = tableMap.computeIfAbsent(e.getKey(), (p) -> new HashMap<>());
+        Map<ByteBuffer, ByteBuffer> dataMap = tableMap.computeIfAbsent(e.getKey(), (p) -> new HashMap<>());
         for (Map.Entry<Bytes, Object> d : e.getValue().getOps().entrySet()) {
+          Bytes key = d.getKey();
           Object value = d.getValue();
           if (value instanceof byte[]) {
-            dataMap.put(d.getKey().array(), (byte[]) value);
+            dataMap.put(ByteBuffer.wrap(key.array()), ByteBuffer.wrap((byte[]) value));
           } else if (value instanceof CodecBuffer) {
-            dataMap.put(d.getKey().array(), (byte[]) ((CodecBuffer) value).getArray());
+            dataMap.put(key.asReadOnlyByteBuffer(), ((CodecBuffer) value).asReadOnlyByteBuffer());
           } else if (value == Op.DELETE) {
-            dataMap.put(d.getKey().array(), null);
+            dataMap.put(ByteBuffer.wrap(key.array()), null);
           } else {
             throw new IllegalStateException("Unexpected value: " + value
                 + ", class=" + value.getClass().getSimpleName());
@@ -406,7 +408,7 @@ public class RDBBatchOperation implements BatchOperation {
     opCache.put(family, key, value);
   }
 
-  public Map<String, Map<byte[], byte[]>> getCachedTransaction() {
+  public Map<String, Map<ByteBuffer, ByteBuffer>> getCachedTransaction() {
     return opCache.getCachedTransaction();
   }
 }
