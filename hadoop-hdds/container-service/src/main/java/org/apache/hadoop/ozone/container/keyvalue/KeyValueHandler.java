@@ -244,14 +244,14 @@ public class KeyValueHandler extends Handler {
       DispatcherContext dispatcherContext) {
     Type cmdType = request.getCmdType();
     // Validate the request has been made to the correct datanode with the node id matching.
-    if (kvContainer != null) {
+    /*if (kvContainer != null) {
       try {
         handler.validateRequestDatanodeId(kvContainer.getContainerData().getReplicaIndex(),
             request.getDatanodeUuid());
       } catch (StorageContainerException e) {
         return ContainerUtils.logAndReturnError(LOG, e, request);
       }
-    }
+    }*/
 
     switch (cmdType) {
     case CreateContainer:
