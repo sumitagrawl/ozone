@@ -1745,6 +1745,8 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       bootstrap(omNodeDetails);
     }
 
+    omExecutionFlow.start();
+
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());
     SYSTEMAUDIT.logWriteSuccess(buildAuditMessageForSuccess(OMSystemAction.STARTUP, auditMap));
@@ -1821,6 +1823,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
       isOmGrpcServerRunning = true;
     }
     setStartTime();
+    omExecutionFlow.start();
     omState = State.RUNNING;
     auditMap.put("NewOmState", omState.name());
     SYSTEMAUDIT.logWriteSuccess(buildAuditMessageForSuccess(OMSystemAction.STARTUP, auditMap));
@@ -2234,6 +2237,7 @@ public final class OzoneManager extends ServiceRuntimeInfoImpl
     }
     try {
       omState = State.STOPPED;
+      omExecutionFlow.stop();
       // Cancel the metrics timer and set to null.
       if (metricsTimer != null) {
         metricsTimer.cancel();

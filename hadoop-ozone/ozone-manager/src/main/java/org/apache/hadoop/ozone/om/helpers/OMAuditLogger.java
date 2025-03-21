@@ -23,10 +23,12 @@ import java.io.IOException;
 import java.util.HashMap;
 import java.util.Map;
 import java.util.concurrent.atomic.AtomicBoolean;
+import org.apache.hadoop.ozone.audit.AuditEventStatus;
 import org.apache.hadoop.ozone.audit.AuditLogger;
 import org.apache.hadoop.ozone.audit.AuditMessage;
 import org.apache.hadoop.ozone.audit.OMAction;
 import org.apache.hadoop.ozone.om.OzoneManager;
+import org.apache.hadoop.ozone.om.execution.flowcontrol.ExecutionContext;
 import org.apache.hadoop.ozone.om.request.OMClientRequest;
 import org.apache.hadoop.ozone.protocol.proto.OzoneManagerProtocolProtos;
 import org.apache.ratis.server.protocol.TermIndex;
@@ -158,6 +160,25 @@ public final class OMAuditLogger {
       log(builder);
     } catch (Exception ex) {
       LOG.error("Exception occurred while write audit log, ", ex);
+    }
+  }
+
+  public static void log(OMAuditLogger.Builder builder, ExecutionContext context) {
+    log(builder, context, null);
+  }
+
+  public static void log(OMAuditLogger.Builder builder, ExecutionContext context, Throwable th) {
+    if (th != null) {
+      builder.getMessageBuilder().withResult(AuditEventStatus.FAILURE).withException(th);
+      builder.setLog(true);
+    }
+    if (builder.isLog.get()) {
+      if (null == builder.getAuditMap()) {
+        builder.setAuditMap(new HashMap<>());
+      }
+      builder.getAuditMap().put("Transaction", context.getTermIndex().getIndex() + "::" + context.getIndex());
+      builder.getMessageBuilder().withParams(builder.getAuditMap());
+      builder.getAuditLogger().logWrite(builder.getMessageBuilder().build());
     }
   }
 
