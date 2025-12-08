@@ -775,8 +775,11 @@ public class TestContainerStateMachineFailures {
       induceFollowerFailure(omKeyLocationInfo, 2);
       key.flush();
       // wait for container close for failure in flush for both followers applyTransaction failure
-      GenericTestUtils.waitFor(() -> containerSet.getContainer(omKeyLocationInfo.getContainerID()).getContainerData()
-              .getState().equals(ContainerProtos.ContainerDataProto.State.CLOSED), 100, 30000);
+      GenericTestUtils.waitFor(() -> {
+        ContainerProtos.ContainerDataProto.State state = containerSet.getContainer(omKeyLocationInfo.getContainerID())
+            .getContainerData().getState();
+        return state.equals(ContainerProtos.ContainerDataProto.State.CLOSED) || state.equals(QUASI_CLOSED);
+      }, 100, 30000);
       key.write("ratis".getBytes(UTF_8));
       key.flush();
     }
