@@ -139,7 +139,7 @@ public class TestContainerStateMachineFailures {
         TimeUnit.MILLISECONDS);
     conf.setTimeDuration(HDDS_COMMAND_STATUS_REPORT_INTERVAL, 200,
         TimeUnit.MILLISECONDS);
-    conf.setTimeDuration(HDDS_PIPELINE_REPORT_INTERVAL, 10000,
+    conf.setTimeDuration(HDDS_PIPELINE_REPORT_INTERVAL, 200,
         TimeUnit.MILLISECONDS);
     conf.setTimeDuration(HDDS_HEARTBEAT_INTERVAL, 200, TimeUnit.MILLISECONDS);
     conf.setTimeDuration(OZONE_SCM_STALENODE_INTERVAL, 30, TimeUnit.SECONDS);
@@ -859,7 +859,7 @@ public class TestContainerStateMachineFailures {
     // previous pipeline gets closed due to disk full failure, so created a new pipeline and write should succeed,
     // and this ensures later test case can pass (should not fail due to pipeline unavailability as timeout is 200ms
     // for pipeline creation which can fail in testcase later on)
-    Pipeline pipeline = cluster.getStorageContainerManager().getPipelineManager().createPipeline(replicationConfig);
+    /*Pipeline pipeline = cluster.getStorageContainerManager().getPipelineManager().createPipeline(replicationConfig);
     cluster.getStorageContainerManager().getPipelineManager().waitPipelineReady(pipeline.getId(), 60000);
 
     try (OzoneOutputStream key = objectStore.getVolume(volumeName).getBucket(bucketName).createKey(
@@ -867,7 +867,9 @@ public class TestContainerStateMachineFailures {
 
       key.write("ratis".getBytes(UTF_8));
       key.flush();
-    }
+    }*/
+    shutdown();
+    init();
   }
 
   private void induceFollowerFailure(OmKeyLocationInfo omKeyLocationInfo,
