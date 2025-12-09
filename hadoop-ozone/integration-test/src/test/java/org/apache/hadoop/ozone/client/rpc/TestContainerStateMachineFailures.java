@@ -735,7 +735,11 @@ public class TestContainerStateMachineFailures {
               .getDatanodeStateMachine()
               .getContainer().getContainerSet().getContainer(containerID)
               .getContainerState(),
-          ContainerProtos.ContainerDataProto.State.CLOSED);
+          ContainerProtos.ContainerDataProto.State.CLOSED, "Container " + containerID + " state " +
+              TestHelper.getDatanodeService(omKeyLocationInfo, cluster)
+              .getDatanodeStateMachine()
+              .getContainer().getContainerSet().getContainer(containerID)
+              .getContainerState());
       assertTrue(stateMachine.isStateMachineHealthy());
       stateMachine.takeSnapshot();
 
